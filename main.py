@@ -10,7 +10,7 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.autograd import Variable
 import models
-
+import copy
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Slimming CIFAR training')
@@ -145,7 +145,7 @@ def train(epoch):
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.1f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.data[0]))
+                100. * batch_idx / len(train_loader), loss.data.item()))
 
 def test():
     model.eval()
@@ -156,7 +156,7 @@ def test():
             data, target = data.cuda(), target.cuda()
         data, target = Variable(data, volatile=True), Variable(target)
         output = model(data)
-        test_loss += F.cross_entropy(output, target, size_average=False).data[0] # sum up batch loss
+        test_loss += F.cross_entropy(output, target, size_average=False).data.item() # sum up batch loss
         pred = output.data.max(1, keepdim=True)[1] # get the index of the max log-probability
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
@@ -166,10 +166,13 @@ def test():
         100. * correct / len(test_loader.dataset)))
     return correct / float(len(test_loader.dataset))
 
-def save_checkpoint(state, is_best, filepath):
-    torch.save(state, os.path.join(filepath, 'checkpoint.pth.tar'))
+def save_checkpoint(state, is_best, dir_path):
+    torch.save(state, os.path.join(dir_path, 'checkpoint.pth.tar'))
     if is_best:
-        shutil.copyfile(os.path.join(filepath, 'checkpoint.pth.tar'), os.path.join(filepath, 'model_best.pth.tar'))
+        shutil.copyfile(os.path.join(dir_path, 'checkpoint.pth.tar'), os.path.join(dir_path, 'model_best.pth.tar'))
+
+    if (state['epoch']-1)%10 == 0:
+        shutil.copyfile(os.path.join(dir_path, 'checkpoint.pth.tar'), os.path.join(dir_path, 'checkpoint_' + str(state['epoch']-1) + '.pth.tar'))
 
 best_prec1 = 0.
 for epoch in range(args.start_epoch, args.epochs):
@@ -185,6 +188,6 @@ for epoch in range(args.start_epoch, args.epochs):
         'state_dict': model.state_dict(),
         'best_prec1': best_prec1,
         'optimizer': optimizer.state_dict(),
-    }, is_best, filepath=args.save)
+    }, is_best, dir_path=args.save)
 
 print("Best accuracy: "+str(best_prec1))
