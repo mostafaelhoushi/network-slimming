@@ -3,6 +3,8 @@ import os
 import argparse
 import shutil
 import numpy as np
+import csv
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -130,6 +132,9 @@ def updateBN():
 
 def train(epoch):
     model.train()
+    train_loss = 0
+    correct = 0
+    end = time.time()
     for batch_idx, (data, target) in enumerate(train_loader):
         if args.cuda:
             data, target = data.cuda(), target.cuda()
@@ -147,10 +152,21 @@ def train(epoch):
                 epoch, batch_idx * len(data), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.data.item()))
 
+        train_loss += loss.data.item()
+        correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+
+    train_loss /= len(train_loader.dataset)
+    acc = correct.cpu().numpy() / float(len(train_loader.dataset))
+    epoch_train_time = time.time() - end
+    batch_train_avg_time = epoch_train_time / float(len(train_loader.dataset))
+
+    return (train_loss, acc, batch_train_avg_time)    
+
 def test():
     model.eval()
     test_loss = 0
     correct = 0
+    end = time.time()
     for data, target in test_loader:
         if args.cuda:
             data, target = data.cuda(), target.cuda()
@@ -161,10 +177,13 @@ def test():
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
     test_loss /= len(test_loader.dataset)
+    acc = correct.cpu().numpy() / float(len(test_loader.dataset)) 
+    epoch_test_time = time.time() - end
+    batch_test_avg_time = epoch_test_time / float(len(test_loader.dataset))
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.1f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
-        100. * correct / len(test_loader.dataset)))
-    return correct / float(len(test_loader.dataset))
+        100. * acc))
+    return (test_loss, acc, batch_test_avg_time)
 
 def save_checkpoint(state, is_best, dir_path):
     torch.save(state, os.path.join(dir_path, 'checkpoint.pth.tar'))
@@ -174,20 +193,42 @@ def save_checkpoint(state, is_best, dir_path):
     if (state['epoch']-1)%10 == 0:
         shutil.copyfile(os.path.join(dir_path, 'checkpoint.pth.tar'), os.path.join(dir_path, 'checkpoint_' + str(state['epoch']-1) + '.pth.tar'))
 
+model_dir = args.save
 best_prec1 = 0.
+# initialize log
+train_log = []
+with open(os.path.join(model_dir, "train_log.csv"), "w") as train_log_file:
+    train_log_csv = csv.writer(train_log_file)
+    train_log_csv.writerow(['epoch', 'train_loss', 'train_top1_acc', 'train_time', 'test_loss', 'test_top1_acc', 'test_time'])
+
 for epoch in range(args.start_epoch, args.epochs):
     if epoch in [args.epochs*0.5, args.epochs*0.75]:
         for param_group in optimizer.param_groups:
             param_group['lr'] *= 0.1
-    train(epoch)
-    prec1 = test()
+    train_epoch_log = train(epoch)
+    val_epoch_log = test()
+    (_, prec1, _) = val_epoch_log
     is_best = prec1 > best_prec1
     best_prec1 = max(prec1, best_prec1)
+
+    # save checkpoint
     save_checkpoint({
         'epoch': epoch + 1,
         'state_dict': model.state_dict(),
         'best_prec1': best_prec1,
         'optimizer': optimizer.state_dict(),
-    }, is_best, dir_path=args.save)
+    }, is_best, dir_path=model_dir)
+
+    if is_best:
+        torch.save(model.state_dict(), os.path.join(model_dir, "weights.pth"))
+        torch.save(optimizer.state_dict(), os.path.join(model_dir, "optimizer.pth"))
+        torch.save(model, os.path.join(model_dir, "model.pth"))
+
+
+    # append to log
+    with open(os.path.join(model_dir, "train_log.csv"), "a") as train_log_file:
+        train_log_csv = csv.writer(train_log_file)
+        train_log_csv.writerow(((epoch,) + train_epoch_log + val_epoch_log)) 
+
 
 print("Best accuracy: "+str(best_prec1))

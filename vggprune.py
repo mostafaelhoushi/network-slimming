@@ -37,7 +37,7 @@ if args.cuda:
 if args.model:
     if os.path.isfile(args.model):
         print("=> loading checkpoint '{}'".format(args.model))
-        checkpoint = torch.load(args.model)
+        checkpoint = torch.load(args.model, encoding='latin1')
         args.start_epoch = checkpoint['epoch']
         best_prec1 = checkpoint['best_prec1']
         model.load_state_dict(checkpoint['state_dict'])
