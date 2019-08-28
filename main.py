@@ -156,7 +156,7 @@ def train(epoch):
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
     train_loss /= len(train_loader.dataset)
-    acc = correct.cpu().numpy() / float(len(train_loader.dataset))
+    acc = 100. * correct.cpu().numpy() / float(len(train_loader.dataset))
     epoch_train_time = time.time() - end
     batch_train_avg_time = epoch_train_time / float(len(train_loader.dataset))
 
@@ -177,12 +177,12 @@ def test():
         correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
     test_loss /= len(test_loader.dataset)
-    acc = correct.cpu().numpy() / float(len(test_loader.dataset)) 
+    acc = 100. * correct.cpu().numpy() / float(len(test_loader.dataset)) 
     epoch_test_time = time.time() - end
     batch_test_avg_time = epoch_test_time / float(len(test_loader.dataset))
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.1f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
-        100. * acc))
+        acc))
     return (test_loss, acc, batch_test_avg_time)
 
 def save_checkpoint(state, is_best, dir_path):
