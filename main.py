@@ -197,9 +197,10 @@ model_dir = args.save
 best_prec1 = 0.
 # initialize log
 train_log = []
+start_log_time = time.time()
 with open(os.path.join(model_dir, "train_log.csv"), "w") as train_log_file:
     train_log_csv = csv.writer(train_log_file)
-    train_log_csv.writerow(['epoch', 'train_loss', 'train_top1_acc', 'train_time', 'test_loss', 'test_top1_acc', 'test_time'])
+    train_log_csv.writerow(['epoch', 'train_loss', 'train_top1_acc', 'train_time', 'test_loss', 'test_top1_acc', 'test_time', 'cumulative_time'])
 
 for epoch in range(args.start_epoch, args.epochs):
     if epoch in [args.epochs*0.5, args.epochs*0.75]:
@@ -228,7 +229,7 @@ for epoch in range(args.start_epoch, args.epochs):
     # append to log
     with open(os.path.join(model_dir, "train_log.csv"), "a") as train_log_file:
         train_log_csv = csv.writer(train_log_file)
-        train_log_csv.writerow(((epoch,) + train_epoch_log + val_epoch_log)) 
+        train_log_csv.writerow(((epoch,) + train_epoch_log + val_epoch_log + (time.time() - start_log_time,))) 
 
 
 print("Best accuracy: "+str(best_prec1))
