@@ -14,6 +14,8 @@ from torch.autograd import Variable
 import models
 import copy
 
+from freeze import freeze_weights, freeze_biases, freeze_gamma, freeze_beta
+
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Slimming CIFAR training')
 parser.add_argument('--dataset', type=str, default='cifar100',
@@ -22,6 +24,14 @@ parser.add_argument('--sparsity-regularization', '-sr', dest='sr', action='store
                     help='train with channel sparsity regularization')
 parser.add_argument('--s', type=float, default=0.0001,
                     help='scale sparse rate (default: 0.0001)')
+parser.add_argument('--freeze-weights', dest='freeze_weights', action='store_true',
+                    help='freeze weights of convolution and fully-connected layers')
+parser.add_argument('--freeze-biases', dest='freeze_biases', action='store_true',
+                    help='freeze biases of convolution and fully-connected layers')
+parser.add_argument('--freeze-gamma', dest='freeze_gamma', action='store_true',
+                    help='freeze gamma of batchnorm layers')
+parser.add_argument('--freeze-beta', dest='freeze_beta', action='store_true',
+                    help='freeze beta of batchnorm layers')
 parser.add_argument('--refine', default='', type=str, metavar='PATH',
                     help='path to the pruned model to be fine tuned')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -123,6 +133,15 @@ if args.resume:
               .format(args.resume, checkpoint['epoch'], best_prec1))
     else:
         print("=> no checkpoint found at '{}'".format(args.resume))
+
+if args.freeze_weights:
+    model = freeze_weights(model)
+if args.freeze_biases:
+    model = freeze_biases(model)
+if args.freeze_gamma:
+    model = freeze_gamma(model)
+if args.freeze_beta:
+    model = freeze_beta(model)
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
