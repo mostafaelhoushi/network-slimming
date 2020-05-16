@@ -32,6 +32,8 @@ parser.add_argument('--freeze-gamma', dest='freeze_gamma', action='store_true',
                     help='freeze gamma of batchnorm layers')
 parser.add_argument('--freeze-beta', dest='freeze_beta', action='store_true',
                     help='freeze beta of batchnorm layers')
+parser.add_argument('--no-backward-pass', dest='no_backward_pass', action='store_true',
+                    help='during training just do forward pass to update the running mean and var of batchnorm layers')
 parser.add_argument('--refine', default='', type=str, metavar='PATH',
                     help='path to the pruned model to be fine tuned')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -162,10 +164,11 @@ def train(epoch):
         output = model(data)
         loss = F.cross_entropy(output, target)
         pred = output.data.max(1, keepdim=True)[1]
-        loss.backward()
-        if args.sr:
-            updateBN()
-        optimizer.step()
+        if args.no_backward_pass is False:
+            loss.backward()
+            if args.sr:
+                updateBN()
+            optimizer.step()
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.1f}%)]\tLoss: {:.6f}'.format(
                 epoch, batch_idx * len(data), len(train_loader.dataset),
