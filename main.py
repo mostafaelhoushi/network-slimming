@@ -14,7 +14,7 @@ from torch.autograd import Variable
 import models
 import copy
 
-from freeze import freeze_weights, freeze_biases, freeze_gamma, freeze_beta
+import bnutils
 
 # Training settings
 parser = argparse.ArgumentParser(description='PyTorch Slimming CIFAR training')
@@ -137,13 +137,13 @@ if args.resume:
         print("=> no checkpoint found at '{}'".format(args.resume))
 
 if args.freeze_weights:
-    model = freeze_weights(model)
+    model = bnutils.freeze_weights(model)
 if args.freeze_biases:
-    model = freeze_biases(model)
+    model = bnutils.freeze_biases(model)
 if args.freeze_gamma:
-    model = freeze_gamma(model)
+    model = bnutils.freeze_gamma(model)
 if args.freeze_beta:
-    model = freeze_beta(model)
+    model = bnutils.freeze_beta(model)
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
