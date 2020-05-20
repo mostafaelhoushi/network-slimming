@@ -13,6 +13,7 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable
 import models
 import copy
+from contextlib import redirect_stdout
 
 import bnutils
 
@@ -34,6 +35,8 @@ parser.add_argument('--freeze-beta', dest='freeze_beta', action='store_true',
                     help='freeze beta of batchnorm layers')
 parser.add_argument('--no-backward-pass', dest='no_backward_pass', action='store_true',
                     help='during training just do forward pass to update the running mean and var of batchnorm layers')
+parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
+                   help='evaluate only')
 parser.add_argument('--refine', default='', type=str, metavar='PATH',
                     help='path to the pruned model to be fine tuned')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -60,6 +63,8 @@ parser.add_argument('--log-interval', type=int, default=100, metavar='N',
                     help='how many batches to wait before logging training status')
 parser.add_argument('--save', default='./logs', type=str, metavar='PATH',
                     help='path to save prune model (default: current directory)')
+parser.add_argument('--print-weights', default=True, type=lambda x:bool(distutils.util.strtobool(x)), 
+                    help='For printing the weights of Model (default: True)')
 parser.add_argument('--arch', default='vgg', type=str, 
                     help='architecture to use')
 parser.add_argument('--depth', default=19, type=int,
@@ -213,7 +218,8 @@ def save_checkpoint(state, is_best, dir_path):
         shutil.copyfile(os.path.join(dir_path, 'checkpoint.pth.tar'), os.path.join(dir_path, 'model_best.pth.tar'))
 
     if (state['epoch']-1)%10 == 0:
-        shutil.copyfile(os.path.join(dir_path, 'checkpoint.pth.tar'), os.path.join(dir_path, 'checkpoint_' + str(state['epoch']-1) + '.pth.tar'))
+        os.makedirs(os.path.join(dir_path, 'checkpoints'), exist_ok=True)
+        shutil.copyfile(os.path.join(dir_path, 'checkpoint.pth.tar'), os.path.join(dir_path, 'checkpoints', 'checkpoint_' + str(state['epoch']-1) + '.pth.tar'))    
 
 model_dir = args.save
 best_prec1 = 0.
@@ -224,6 +230,12 @@ with open(os.path.join(model_dir, "train_log.csv"), "w") as train_log_file:
     train_log_csv = csv.writer(train_log_file)
     train_log_csv.writerow(['epoch', 'train_loss', 'train_top1_acc', 'train_time', 'test_loss', 'test_top1_acc', 'test_time', 'cumulative_time'])
 
+if args.evaluate:
+    val_epoch_log = test()
+    (_, prec1, _) = val_epoch_log
+    print("Precision: ", prec1)
+    exit()
+
 for epoch in range(args.start_epoch, args.epochs):
     if epoch in [args.epochs*0.5, args.epochs*0.75]:
         for param_group in optimizer.param_groups:
@@ -233,6 +245,18 @@ for epoch in range(args.start_epoch, args.epochs):
     (_, prec1, _) = val_epoch_log
     is_best = prec1 > best_prec1
     best_prec1 = max(prec1, best_prec1)
+    
+    if (args.print_weights):
+        os.makedirs(os.path.join(model_dir, 'weights_logs'), exist_ok=True)
+        with open(os.path.join(model_dir, 'weights_logs', 'weights_log_' + str(epoch) + '.txt'), 'w') as weights_log_file:
+            with redirect_stdout(weights_log_file):
+                # Log model's state_dict
+                print("Model's state_dict:")
+                # TODO: Use checkpoint above
+                for param_tensor in model.state_dict():
+                    print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+                    print(model.state_dict()[param_tensor])
+                    print("")
 
     # save checkpoint
     save_checkpoint({
