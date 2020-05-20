@@ -59,8 +59,14 @@ def get_batchnorm_layers(model):
             bnlayers.extend(get_batchnorm_layers(module))
 
     return bnlayers  
+    
+def update_mean_var(model, dataloader, device=torch.device("cuda")):
+    for bnlayer in get_batchnorm_layers(model):
+        update_layer_mean_var(model, bnlayer, dataloader, device)
+        
+    return model
 
-def update_mean_var(model, bnlayer, dataloader, device):
+def update_layer_mean_var(model, bnlayer, dataloader, device=torch.device("cuda")):
     def get_mean_var_hook(self, inputs):
         global mean_iter
         global iter_size

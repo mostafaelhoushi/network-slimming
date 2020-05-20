@@ -37,6 +37,8 @@ parser.add_argument('--no-backward-pass', dest='no_backward_pass', action='store
                     help='during training just do forward pass to update the running mean and var of batchnorm layers')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
                    help='evaluate only')
+parser.add_argument('--update-mean-var', dest='update_mean_var', action='store_true',
+                    help='replace running_mean and running_var of batchnorm layers with absolute mean and var')
 parser.add_argument('--refine', default='', type=str, metavar='PATH',
                     help='path to the pruned model to be fine tuned')
 parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -149,6 +151,8 @@ if args.freeze_gamma:
     model = bnutils.freeze_gamma(model)
 if args.freeze_beta:
     model = bnutils.freeze_beta(model)
+if args.update_mean_var:
+    model = bnutils.update_mean_var(model, train_loader) 
 
 # additional subgradient descent on the sparsity-induced penalty term
 def updateBN():
@@ -233,49 +237,48 @@ with open(os.path.join(model_dir, "train_log.csv"), "w") as train_log_file:
 if args.evaluate:
     val_epoch_log = test()
     (_, prec1, _) = val_epoch_log
-    print("Precision: ", prec1)
-    exit()
+    best_prec1 = prec1
+else:
+    for epoch in range(args.start_epoch, args.epochs):
+        if epoch in [args.epochs*0.5, args.epochs*0.75]:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] *= 0.1
+        train_epoch_log = train(epoch)
+        val_epoch_log = test()
+        (_, prec1, _) = val_epoch_log
+        is_best = prec1 > best_prec1
+        best_prec1 = max(prec1, best_prec1)
 
-for epoch in range(args.start_epoch, args.epochs):
-    if epoch in [args.epochs*0.5, args.epochs*0.75]:
-        for param_group in optimizer.param_groups:
-            param_group['lr'] *= 0.1
-    train_epoch_log = train(epoch)
-    val_epoch_log = test()
-    (_, prec1, _) = val_epoch_log
-    is_best = prec1 > best_prec1
-    best_prec1 = max(prec1, best_prec1)
-    
-    if (args.print_weights):
-        os.makedirs(os.path.join(model_dir, 'weights_logs'), exist_ok=True)
-        with open(os.path.join(model_dir, 'weights_logs', 'weights_log_' + str(epoch) + '.txt'), 'w') as weights_log_file:
-            with redirect_stdout(weights_log_file):
-                # Log model's state_dict
-                print("Model's state_dict:")
-                # TODO: Use checkpoint above
-                for param_tensor in model.state_dict():
-                    print(param_tensor, "\t", model.state_dict()[param_tensor].size())
-                    print(model.state_dict()[param_tensor])
-                    print("")
+        if (args.print_weights):
+            os.makedirs(os.path.join(model_dir, 'weights_logs'), exist_ok=True)
+            with open(os.path.join(model_dir, 'weights_logs', 'weights_log_' + str(epoch) + '.txt'), 'w') as weights_log_file:
+                with redirect_stdout(weights_log_file):
+                    # Log model's state_dict
+                    print("Model's state_dict:")
+                    # TODO: Use checkpoint above
+                    for param_tensor in model.state_dict():
+                        print(param_tensor, "\t", model.state_dict()[param_tensor].size())
+                        print(model.state_dict()[param_tensor])
+                        print("")
 
-    # save checkpoint
-    save_checkpoint({
-        'epoch': epoch + 1,
-        'state_dict': model.state_dict(),
-        'best_prec1': best_prec1,
-        'optimizer': optimizer.state_dict(),
-    }, is_best, dir_path=model_dir)
+        # save checkpoint
+        save_checkpoint({
+            'epoch': epoch + 1,
+            'state_dict': model.state_dict(),
+            'best_prec1': best_prec1,
+            'optimizer': optimizer.state_dict(),
+        }, is_best, dir_path=model_dir)
 
-    if is_best:
-        torch.save(model.state_dict(), os.path.join(model_dir, "weights.pth"))
-        torch.save(optimizer.state_dict(), os.path.join(model_dir, "optimizer.pth"))
-        torch.save(model, os.path.join(model_dir, "model.pth"))
+        if is_best:
+            torch.save(model.state_dict(), os.path.join(model_dir, "weights.pth"))
+            torch.save(optimizer.state_dict(), os.path.join(model_dir, "optimizer.pth"))
+            torch.save(model, os.path.join(model_dir, "model.pth"))
 
 
-    # append to log
-    with open(os.path.join(model_dir, "train_log.csv"), "a") as train_log_file:
-        train_log_csv = csv.writer(train_log_file)
-        train_log_csv.writerow(((epoch,) + train_epoch_log + val_epoch_log + (time.time() - start_log_time,))) 
+        # append to log
+        with open(os.path.join(model_dir, "train_log.csv"), "a") as train_log_file:
+            train_log_csv = csv.writer(train_log_file)
+            train_log_csv.writerow(((epoch,) + train_epoch_log + val_epoch_log + (time.time() - start_log_time,))) 
 
 
 print("Best accuracy: "+str(best_prec1))
